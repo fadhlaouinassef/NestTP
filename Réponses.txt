@@ -1,0 +1,9 @@
+Explication de l’architecture (analogie véhicule)
+
+Le MoteurModule représente le moteur : il peut démarrer et donner un “statut” (arrêt ou “running”).
+
+Le GenerateurModule dépend du moteur (via le service de véhicule ou service principal) : quand le moteur tourne, le générateur peut produire de l’énergie.
+
+Le PhareModule et le AudioModule dépendent de l’énergie générée : ils ne peuvent pas fonctionner si le générateur n’a pas produit de puissance.
+
+Le VehiculeModule orchestre tout : il lance le moteur, déclenche la génération d’énergie, puis demande au phare et à l’audio de fonctionner.
