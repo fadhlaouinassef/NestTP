@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class CreateUserDto {
   @IsString({ message: "Le nom d'utilisateur doit être une chaîne." })
@@ -10,7 +10,10 @@ export class CreateUserDto {
   @IsEmail({}, { message: "L'adresse email fournie est invalide." })
   email!: string;
 
-  // status est optionnel dans le DTO pour la création (par défaut 'inactive' si non fourni)
-  @IsString({ message: 'Le statut doit être une chaîne.' })
-  status?: string;
+  @IsString({ message: 'Le mot de passe doit être une chaîne.' })
+  @IsNotEmpty({ message: 'Le champ password est requis.' })
+  @MinLength(6, {
+    message: 'Le mot de passe doit contenir au moins 6 caractères.',
+  })
+  password!: string;
 }

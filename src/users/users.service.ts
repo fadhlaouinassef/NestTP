@@ -1,81 +1,126 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { User } from './interfaces/user.interface';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ObjectId } from 'mongodb';
+import { Utilisateurs } from '../entities/utilisateurs/utilisateurs';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  private users: User[] = [
-    {
-      id: 1,
-      username: 'Mohamed',
-      email: 'mohamed@esprit.tn',
-      status: 'active',
-    },
-    { id: 2, username: 'Sarra', email: 'sarra@esprit.tn', status: 'inactive' },
-    { id: 3, username: 'Ali', email: 'ali@esprit.tn', status: 'inactive' },
-    { id: 4, username: 'Eya', email: 'eya@esprit.tn', status: 'active' },
-  ];
+  constructor(
+    @InjectRepository(Utilisateurs)
+    private readonly utilisateursRepository: Repository<Utilisateurs>,
+  ) {}
 
-  findAll(filter?: { username?: string; status?: string }): User[] {
-    let result = this.users;
-    if (filter) {
-      if (filter.username) {
-        const q = filter.username.toLowerCase();
-        result = result.filter((u) => u.username.toLowerCase().includes(q));
-      }
-      if (filter.status) {
-        result = result.filter((u) => u.status === filter.status);
-      }
+  /**
+   * 1. Créer un nouvel utilisateur avec active = false par défaut
+   */
+  async create(createUserDto: CreateUserDto): Promise<Utilisateurs> {
+    const utilisateur = this.utilisateursRepository.create({
+      ...createUserDto,
+      active: false, // Propriété active définie à false lors de la création
+    });
+    return await this.utilisateursRepository.save(utilisateur);
+  }
+
+  /**
+   * 2. Récupérer tous les utilisateurs
+   */
+  async findAll(): Promise<Utilisateurs[]> {
+    return await this.utilisateursRepository.find();
+  }
+
+  /**
+   * 3. Trouver un utilisateur par son id
+   */
+  async findOneById(id: string): Promise<Utilisateurs> {
+    if (!ObjectId.isValid(id)) {
+      throw new BadRequestException('ID invalide');
     }
-    return result;
-  }
+    
+    const utilisateur = await this.utilisateursRepository.findOne({
+      where: { _id: new ObjectId(id) } as any,
+    });
 
-  findOne(id: number): User {
-    const user = this.users.find((u) => u.id === id);
-    if (!user) {
-      throw new NotFoundException(`Utilisateur avec id ${id} non trouvé.`);
+    if (!utilisateur) {
+      throw new NotFoundException(`Utilisateur avec id ${id} non trouvé`);
     }
-    return user;
+
+    return utilisateur;
   }
 
-  create(dto: CreateUserDto): User {
-    const nextId = this.users.length
-      ? Math.max(...this.users.map((u) => u.id)) + 1
-      : 1;
-    const user: User = {
-      id: nextId,
-      username: dto.username,
-      email: dto.email,
-      status: dto.status ?? 'inactive',
-    };
-    this.users.push(user);
-    return user;
-  }
+  /**
+   * 4. Trouver un utilisateur par son email
+   */
+  async findOneByEmail(email: string): Promise<Utilisateurs> {
+    const utilisateur = await this.utilisateursRepository.findOne({
+      where: { email } as any,
+    });
 
-  update(id: number, dto: CreateUserDto): User {
-    const idx = this.users.findIndex((u) => u.id === id);
-    if (idx === -1) {
-      throw new NotFoundException(`Utilisateur avec id ${id} non trouvé.`);
+    if (!utilisateur) {
+      throw new NotFoundException(`Utilisateur avec email ${email} non trouvé`);
     }
-    const updated: User = {
-      ...this.users[idx],
-      username: dto.username ?? this.users[idx].username,
-      email: dto.email ?? this.users[idx].email,
-      status: dto.status ?? this.users[idx].status,
-    };
-    this.users[idx] = updated;
-    return updated;
+
+    return utilisateur;
   }
 
-  remove(id: number): void {
-    const idx = this.users.findIndex((u) => u.id === id);
-    if (idx === -1) {
-      throw new NotFoundException(`Utilisateur avec id ${id} non trouvé.`);
+  /**
+   * 5. Trouver tous les utilisateurs avec active = true
+   */
+  async findActive(): Promise<Utilisateurs[]> {
+    return await this.utilisateursRepository.find({
+      where: { active: true } as any,
+    });
+  }
+
+  /**
+   * 7. Mettre à jour partiellement un utilisateur
+   */
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<Utilisateurs> {
+    if (!ObjectId.isValid(id)) {
+      throw new BadRequestException('ID invalide');
     }
-    this.users.splice(idx, 1);
+
+    const utilisateur = await this.findOneById(id);
+
+    // Mise à jour partielle des propriétés
+    Object.assign(utilisateur, updateUserDto);
+
+    return await this.utilisateursRepository.save(utilisateur);
   }
 
-  findByStatus(status: string): User[] {
-    return this.users.filter((u) => u.status === status);
+  /**
+   * 8. Supprimer un utilisateur (utilise remove() pour déclencher @BeforeRemove hook)
+   */
+  async remove(id: string): Promise<void> {
+    if (!ObjectId.isValid(id)) {
+      throw new BadRequestException('ID invalide');
+    }
+
+    const utilisateur = await this.findOneById(id);
+
+    // Utiliser remove() au lieu de delete() pour déclencher le hook @BeforeRemove
+    await this.utilisateursRepository.remove(utilisateur);
+  }
+
+  /**
+   * 9. Activer un compte utilisateur en vérifiant le password
+   */
+  async activateAccount(id: string, password: string): Promise<Utilisateurs> {
+    if (!ObjectId.isValid(id)) {
+      throw new BadRequestException('ID invalide');
+    }
+
+    const utilisateur = await this.findOneById(id);
+
+    // Vérifier le mot de passe
+    if (utilisateur.password !== password) {
+      throw new BadRequestException('Mot de passe incorrect');
+    }
+
+    // Activer le compte
+    utilisateur.active = true;
+    return await this.utilisateursRepository.save(utilisateur);
   }
 }
