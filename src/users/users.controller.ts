@@ -9,12 +9,14 @@ import {
   Patch,
   HttpCode,
   HttpStatus,
+  Headers,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ActivateUserDto } from './dto/activate-user.dto';
-import { Utilisateurs } from '../entities/utilisateurs/utilisateurs';
+import { Utilisateurs } from '../entities/utilisateurs';
 
 @Controller('users')
 export class UsersController {
@@ -73,9 +75,37 @@ export class UsersController {
     @Param('id') id: string,
     @Body() activateUserDto: ActivateUserDto,
   ): Promise<Utilisateurs> {
-    return this.usersService.activateAccount(
-      id,
-      activateUserDto.password,
-    );
+    return this.usersService.activateAccount(id, activateUserDto.password);
+  }
+
+  @Get('filter/by-role')
+  async findAllWithRoleFilter(
+    @Headers('x-user-role') role?: string,
+    @Query('role') queryRole?: string,
+  ): Promise<Partial<Utilisateurs>[]> {
+    const userRole = role || queryRole || 'client';
+    return this.usersService.findAllWithRoleFilter(userRole);
+  }
+
+  @Get('inactive/six-months')
+  async findInactiveSince6Months(): Promise<Utilisateurs[]> {
+    return this.usersService.findUsersNotUpdatedSince6Months();
+  }
+
+  @Get('advanced/filters')
+  async findWithAdvancedFilters(
+    @Query('role') role?: string,
+    @Query('active') active?: string,
+    @Query('updatedBefore') updatedBefore?: string,
+    @Query('updatedAfter') updatedAfter?: string,
+  ): Promise<Utilisateurs[]> {
+    const filters: any = {};
+
+    if (role) filters.role = role;
+    if (active !== undefined) filters.active = active === 'true';
+    if (updatedBefore) filters.updatedBefore = new Date(updatedBefore);
+    if (updatedAfter) filters.updatedAfter = new Date(updatedAfter);
+
+    return this.usersService.findWithAdvancedFilters(filters);
   }
 }

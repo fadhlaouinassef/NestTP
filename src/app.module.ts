@@ -8,7 +8,7 @@ import { PhareModule } from './phare/phare.module';
 import { AudioModule } from './audio/audio.module';
 import { VehiculeModule } from './vehicule/vehicule.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Utilisateurs } from './entities/utilisateurs/utilisateurs';
+import { Utilisateurs } from './entities/utilisateurs';
 @Module({
   imports: [
     UsersModule,

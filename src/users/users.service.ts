@@ -1,8 +1,12 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ObjectId } from 'mongodb';
-import { Utilisateurs } from '../entities/utilisateurs/utilisateurs';
+import { Utilisateurs } from '../entities/utilisateurs';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -13,32 +17,23 @@ export class UsersService {
     private readonly utilisateursRepository: Repository<Utilisateurs>,
   ) {}
 
-  /**
-   * 1. Créer un nouvel utilisateur avec active = false par défaut
-   */
   async create(createUserDto: CreateUserDto): Promise<Utilisateurs> {
     const utilisateur = this.utilisateursRepository.create({
       ...createUserDto,
-      active: false, // Propriété active définie à false lors de la création
+      active: false,
     });
     return await this.utilisateursRepository.save(utilisateur);
   }
 
-  /**
-   * 2. Récupérer tous les utilisateurs
-   */
   async findAll(): Promise<Utilisateurs[]> {
     return await this.utilisateursRepository.find();
   }
 
-  /**
-   * 3. Trouver un utilisateur par son id
-   */
   async findOneById(id: string): Promise<Utilisateurs> {
     if (!ObjectId.isValid(id)) {
       throw new BadRequestException('ID invalide');
     }
-    
+
     const utilisateur = await this.utilisateursRepository.findOne({
       where: { _id: new ObjectId(id) } as any,
     });
@@ -50,9 +45,6 @@ export class UsersService {
     return utilisateur;
   }
 
-  /**
-   * 4. Trouver un utilisateur par son email
-   */
   async findOneByEmail(email: string): Promise<Utilisateurs> {
     const utilisateur = await this.utilisateursRepository.findOne({
       where: { email } as any,
@@ -65,34 +57,28 @@ export class UsersService {
     return utilisateur;
   }
 
-  /**
-   * 5. Trouver tous les utilisateurs avec active = true
-   */
   async findActive(): Promise<Utilisateurs[]> {
     return await this.utilisateursRepository.find({
       where: { active: true } as any,
     });
   }
 
-  /**
-   * 7. Mettre à jour partiellement un utilisateur
-   */
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<Utilisateurs> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<Utilisateurs> {
     if (!ObjectId.isValid(id)) {
       throw new BadRequestException('ID invalide');
     }
 
     const utilisateur = await this.findOneById(id);
 
-    // Mise à jour partielle des propriétés
     Object.assign(utilisateur, updateUserDto);
+    utilisateur.updatedAt = new Date();
 
     return await this.utilisateursRepository.save(utilisateur);
   }
 
-  /**
-   * 8. Supprimer un utilisateur (utilise remove() pour déclencher @BeforeRemove hook)
-   */
   async remove(id: string): Promise<void> {
     if (!ObjectId.isValid(id)) {
       throw new BadRequestException('ID invalide');
@@ -100,13 +86,9 @@ export class UsersService {
 
     const utilisateur = await this.findOneById(id);
 
-    // Utiliser remove() au lieu de delete() pour déclencher le hook @BeforeRemove
     await this.utilisateursRepository.remove(utilisateur);
   }
 
-  /**
-   * 9. Activer un compte utilisateur en vérifiant le password
-   */
   async activateAccount(id: string, password: string): Promise<Utilisateurs> {
     if (!ObjectId.isValid(id)) {
       throw new BadRequestException('ID invalide');
@@ -121,6 +103,76 @@ export class UsersService {
 
     // Activer le compte
     utilisateur.active = true;
+    utilisateur.updatedAt = new Date();
     return await this.utilisateursRepository.save(utilisateur);
+  }
+
+  /**
+   * Récupère les utilisateurs avec exclusion de champs sensibles selon le rôle
+   * @param role - Le rôle du demandeur ('admin' ou 'client')
+   * @returns Liste des utilisateurs avec les champs filtrés
+   */
+  async findAllWithRoleFilter(role: string): Promise<Partial<Utilisateurs>[]> {
+    const users = await this.utilisateursRepository.find();
+
+    return users.map((user) => {
+      if (role === 'admin') {
+        // Admin voit tout sauf le mot de passe
+        const { password, ...userWithoutPassword } = user as any;
+        return userWithoutPassword;
+      } else {
+        // Client voit uniquement id, username et email
+        return {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        };
+      }
+    });
+  }
+
+  async findUsersNotUpdatedSince6Months(): Promise<Utilisateurs[]> {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    // Utilisation de MongoDB query native
+    const users = await this.utilisateursRepository.find({
+      where: {
+        updatedAt: { $lt: sixMonthsAgo } as any,
+      } as any,
+    });
+
+    return users;
+  }
+
+  async findWithAdvancedFilters(filters?: {
+    role?: string;
+    active?: boolean;
+    updatedBefore?: Date;
+    updatedAfter?: Date;
+  }): Promise<Utilisateurs[]> {
+    const whereConditions: any = {};
+
+    if (filters?.role) {
+      whereConditions.role = filters.role;
+    }
+
+    if (filters?.active !== undefined) {
+      whereConditions.active = filters.active;
+    }
+
+    if (filters?.updatedBefore || filters?.updatedAfter) {
+      whereConditions.updatedAt = {};
+      if (filters?.updatedBefore) {
+        whereConditions.updatedAt.$lt = filters.updatedBefore;
+      }
+      if (filters?.updatedAfter) {
+        whereConditions.updatedAt.$gt = filters.updatedAfter;
+      }
+    }
+
+    return await this.utilisateursRepository.find({
+      where: whereConditions as any,
+    });
   }
 }
